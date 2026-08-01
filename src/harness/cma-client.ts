@@ -24,7 +24,24 @@ export type CmaUserContent =
 export type CmaOutboundEvent =
   | { type: "user.message"; content: CmaUserContent[] }
   | { type: "user.custom_tool_result"; custom_tool_use_id: string; content: Array<{ type: "text"; text: string }> }
+  | { type: "user.tool_result"; tool_use_id: string; content: Array<{ type: "text"; text: string }> }
   | { type: "user.interrupt" };
+
+interface CmaWorkItem {
+  type: "work";
+  id: string;
+  state: string;
+  data: { type: string; id: string };
+  environment_id?: string;
+}
+
+interface CmaWorkHeartbeat {
+  type: string;
+  lease_extended?: boolean;
+  state?: string;
+  last_heartbeat?: string;
+  ttl_seconds?: number;
+}
 
 interface CmaStopReason {
   type: string;
@@ -146,6 +163,17 @@ export interface CmaClient {
     sessionId: string,
     opts: { signal: AbortSignal; deltas?: string[] },
   ): Promise<AsyncIterable<CmaStreamFrame>>;
+  pollWork(
+    environmentId: string,
+    opts?: { blockMs?: number; reclaimOlderThanMs?: number; workerId?: string },
+  ): Promise<CmaWorkItem | null>;
+  ackWork(environmentId: string, workId: string): Promise<CmaWorkItem>;
+  heartbeatWork(
+    environmentId: string,
+    workId: string,
+    opts?: { desiredTtlSeconds?: number; expectedLastHeartbeat?: string },
+  ): Promise<CmaWorkHeartbeat>;
+  stopWork(environmentId: string, workId: string, force?: boolean): Promise<void>;
 }
 
 async function* frames(body: ReadableStream<Uint8Array>): AsyncGenerator<CmaStreamFrame> {
@@ -226,6 +254,53 @@ export function createCmaClient(options: CmaClientOptions): CmaClient {
         next_page?: string | null;
       };
       return { data: listed.data ?? [], nextPage: listed.next_page ?? null };
+    },
+    async pollWork(environmentId, opts) {
+      const query = new URLSearchParams();
+      if (opts?.blockMs) query.set("block_ms", String(opts.blockMs));
+      if (opts?.reclaimOlderThanMs) query.set("reclaim_older_than_ms", String(opts.reclaimOlderThanMs));
+      const suffix = query.size ? `?${query}` : "";
+      const response = await doFetch(
+        `${baseUrl}/v1/environments/${encodeURIComponent(environmentId)}/work/poll${suffix}`,
+        {
+          method: "GET",
+          headers: {
+            ...(await headers()),
+            ...(opts?.workerId ? { "anthropic-worker-id": opts.workerId } : {}),
+          },
+          signal: AbortSignal.timeout(CMA_REQUEST_TIMEOUT_MS),
+        },
+      );
+      const text = await response.text();
+      if (response.status === 404 || response.status === 204 || !text) return null;
+      if (!response.ok) {
+        throw new CmaApiError(response.status, `CMA work poll failed (${response.status}): ${text.slice(0, 500)}`);
+      }
+      const item = JSON.parse(text) as CmaWorkItem | { type?: string };
+      return item && item.type === "work" ? (item as CmaWorkItem) : null;
+    },
+    async ackWork(environmentId, workId) {
+      return (await request(
+        "POST",
+        `/v1/environments/${encodeURIComponent(environmentId)}/work/${encodeURIComponent(workId)}/ack`,
+      )) as CmaWorkItem;
+    },
+    async heartbeatWork(environmentId, workId, opts) {
+      const query = new URLSearchParams();
+      if (opts?.desiredTtlSeconds) query.set("desired_ttl_seconds", String(opts.desiredTtlSeconds));
+      if (opts?.expectedLastHeartbeat) query.set("expected_last_heartbeat", opts.expectedLastHeartbeat);
+      const suffix = query.size ? `?${query}` : "";
+      return (await request(
+        "POST",
+        `/v1/environments/${encodeURIComponent(environmentId)}/work/${encodeURIComponent(workId)}/heartbeat${suffix}`,
+      )) as CmaWorkHeartbeat;
+    },
+    async stopWork(environmentId, workId, force = false) {
+      await request(
+        "POST",
+        `/v1/environments/${encodeURIComponent(environmentId)}/work/${encodeURIComponent(workId)}/stop`,
+        { force },
+      );
     },
     async streamEvents(sessionId, opts) {
       const query = new URLSearchParams();
