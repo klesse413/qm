@@ -9,7 +9,7 @@ export interface AssembledEnv {
   env: Record<string, string>;
   anthropicKeySource: string;
   openaiKeySource: string;
-  harness: "pi" | "mock" | "opencode" | "codex" | "claude";
+  harness: "pi" | "mock" | "opencode" | "codex" | "claude" | "cma";
   liveEnvFile: string;
   warnings: string[];
 }
@@ -125,14 +125,37 @@ export async function assembleEnv(opts: {
     openaiKeySource = "the worktree .env";
   }
 
-  let harness: "pi" | "mock" | "opencode" | "codex" | "claude";
-  if (opts.callerEnv.HARNESS === "codex" || opts.callerEnv.HARNESS === "claude") {
+  let harness: "pi" | "mock" | "opencode" | "codex" | "claude" | "cma";
+  if (opts.callerEnv.HARNESS === "codex" || opts.callerEnv.HARNESS === "claude" || opts.callerEnv.HARNESS === "cma") {
     harness = opts.callerEnv.HARNESS;
     env.HARNESS = harness;
     if (harness === "codex" && !env.OPENAI_API_KEY) {
       throw new Error(
         "HARNESS=codex needs OPENAI_API_KEY (its CLI cannot do browser OAuth in a container) -- export it, or add it to the live env file or the worktree .env",
       );
+    }
+    if (harness === "cma") {
+      for (const key of [
+        "CMA_ENVIRONMENT_ID",
+        "CMA_AGENT_ID",
+        "CMA_API_KEY",
+        "CMA_MODEL",
+        "CMA_DELIVERY",
+        "CMA_BASE_URL",
+        "CMA_VAULT_IDS",
+      ]) {
+        if (!env[key] && wtEnv[key]) env[key] = wtEnv[key];
+      }
+      if (!env.CMA_ENVIRONMENT_ID || !env.CMA_AGENT_ID) {
+        throw new Error(
+          "HARNESS=cma needs CMA_ENVIRONMENT_ID and CMA_AGENT_ID -- export them, or add them to the live env file or the worktree .env",
+        );
+      }
+      if (!env.ANTHROPIC_API_KEY && !env.CMA_API_KEY) {
+        throw new Error(
+          "HARNESS=cma needs ANTHROPIC_API_KEY or CMA_API_KEY -- export one, or add it to the live env file or the worktree .env",
+        );
+      }
     }
   } else if (env.ANTHROPIC_API_KEY) {
     harness = opts.callerEnv.HARNESS === "opencode" ? "opencode" : "pi";
