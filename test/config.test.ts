@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
-import { baseModelProviders, boolEnv, loadConfig, numEnv, CONFIG_DEFAULTS } from "../src/config.ts";
+import {
+  baseModelProviders,
+  boolEnv,
+  loadConfig,
+  numEnv,
+  providerKeysPresent,
+  CONFIG_DEFAULTS,
+} from "../src/config.ts";
 
 const productionEnv = {
   NODE_ENV: "production",
@@ -353,6 +360,13 @@ test("HARNESS=cma requires the CMA session plumbing and an API key", () => {
   assert.doesNotThrow(() =>
     loadConfig({ HARNESS: "cma", CMA_ENVIRONMENT_ID: "env_1", CMA_AGENT_ID: "agent_1", CMA_API_KEY: "sk-cma" }),
   );
+  assert.equal(
+    providerKeysPresent(
+      loadConfig({ HARNESS: "cma", CMA_ENVIRONMENT_ID: "env_1", CMA_AGENT_ID: "agent_1", CMA_API_KEY: "sk-cma" }),
+    ).cmaKey,
+    true,
+  );
+  assert.equal(providerKeysPresent(loadConfig({})).cmaKey, false);
 });
 
 test("SANDBOX_BACKEND: unset defaults to local (dev only); the secondary must be recognized and differ", () => {

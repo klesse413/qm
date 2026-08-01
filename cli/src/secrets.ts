@@ -396,7 +396,9 @@ function conditionMatches(config: QmConfig, condition: SecretCondition): boolean
   if (condition.kind === "target") return config.target === condition.target;
   if (condition.kind === "model-provider") return config.modelProvider === condition.provider;
   if (condition.kind === "env-all-absent") {
-    return condition.names.every((name) => !config.env[condition.service]?.[name]?.trim());
+    return condition.names.every(
+      (name) => !config.env[condition.service]?.[name]?.trim() && !config.secretEnv?.[condition.service]?.[name],
+    );
   }
   const value = (
     config.env[condition.service]?.[condition.name] ?? targetEnvDefault(config, condition.service, condition.name)

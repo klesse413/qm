@@ -193,6 +193,7 @@ export interface ModelProviderAvailability {
   anthropic: boolean;
   openai: boolean;
   openrouter: boolean;
+  cmaKey?: boolean;
 }
 
 export function modelServiceable(id: string, providers: ModelProviderAvailability): boolean {
@@ -218,7 +219,8 @@ export function modelProviderAvailabilityFor(
   if (harness === "pi") return managedKeys;
   if (harness === "opencode") return { ...configKeys, openrouter: false };
   if (harness === "codex") return configKeys;
-  if (harness === "cma") return { anthropic: configKeys.anthropic, openai: false, openrouter: false };
+  if (harness === "cma")
+    return { anthropic: configKeys.cmaKey ?? configKeys.anthropic, openai: false, openrouter: false };
   return ALL_PROVIDERS_AVAILABLE;
 }
 

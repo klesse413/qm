@@ -163,6 +163,7 @@ export function providerKeysPresent(config: Config): ModelProviderAvailability {
     anthropic: Boolean(config.anthropicApiKey),
     openai: Boolean(config.openaiApiKey),
     openrouter: Boolean(config.openrouterApiKey),
+    cmaKey: Boolean(config.cmaApiKey ?? config.anthropicApiKey),
   };
 }
 

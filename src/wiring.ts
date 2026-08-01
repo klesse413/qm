@@ -1094,10 +1094,7 @@ export function buildApp(
     harnessId: config.harness,
     runtimeFallback: fallback,
     providerKeys,
-    modelProviders: modelProviderAvailabilityFor(
-      config.harness,
-      config.harness === "cma" && config.cmaApiKey ? { ...providerKeys, anthropic: true } : providerKeys,
-    ),
+    modelProviders: modelProviderAvailabilityFor(config.harness, providerKeys),
     runWaitMs: config.runWaitMs,
   });
   const slackCore = createSlackCoreClient({

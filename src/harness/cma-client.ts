@@ -1,6 +1,7 @@
 const CMA_DEFAULT_BASE_URL = "https://api.anthropic.com";
 const CMA_API_VERSION = "2023-06-01";
 const CMA_BETA = "managed-agents-2026-04-01";
+const CMA_REQUEST_TIMEOUT_MS = 60_000;
 
 export type CmaAuthHeaders = () => Promise<Record<string, string>> | Record<string, string>;
 
@@ -172,12 +173,12 @@ export function createCmaClient(options: CmaClientOptions): CmaClient {
     ...(await options.auth()),
   });
 
-  const request = async (method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<unknown> => {
+  const request = async (method: string, path: string, body?: unknown): Promise<unknown> => {
     const response = await doFetch(`${baseUrl}${path}`, {
       method,
       headers: await headers(),
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-      ...(signal ? { signal } : {}),
+      signal: AbortSignal.timeout(CMA_REQUEST_TIMEOUT_MS),
     });
     const text = await response.text();
     if (!response.ok) {

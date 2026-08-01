@@ -186,6 +186,12 @@ function userMessage(text: string, images: HarnessTurnInput["images"] = []): Cma
   return { type: "user.message", content };
 }
 
+function eventKey(event: CmaEvent): string | null {
+  if (event.id) return event.id;
+  if (event.processed_at) return `hash:${sha(JSON.stringify(event))}`;
+  return null;
+}
+
 function eventText(event: CmaEvent): string {
   return (event.content ?? [])
     .filter((block) => block.type === "text" && typeof block.text === "string")
@@ -347,6 +353,11 @@ export function createCmaHarness(opts: CmaHarnessOptions = {}): Harness {
       throw classifyTurnError(error);
     });
     const cmaSessionId = ensured.cmaSessionId;
+    if (turn.cancel?.aborted) {
+      active.delete(controller);
+      if (mode.ephemeral) await api.deleteSession(cmaSessionId).catch(swallowAs("cma: oneshot cleanup", undefined));
+      return { reply: "", stopped: true };
+    }
     const userEntry = await emit({
       type: "user",
       payload: {
@@ -518,15 +529,16 @@ export function createCmaHarness(opts: CmaHarnessOptions = {}): Harness {
     };
 
     const handleEvent = async (event: CmaEvent): Promise<void> => {
-      if (event.id) {
-        if (seenEventIds.has(event.id)) return;
-        seenEventIds.add(event.id);
+      const key = eventKey(event);
+      if (key) {
+        if (seenEventIds.has(key)) return;
+        seenEventIds.add(key);
       }
       if (event.type.startsWith("agent.")) sawAgentEvent = true;
       if (event.type.startsWith("agent.") || event.type.startsWith("session.")) sentSinceLastAgentEvent = false;
       if (event.type === "agent.message") {
         const text = eventText(event);
-        const eventId = event.id ?? randomBytes(8).toString("hex");
+        const eventId = event.id ?? key ?? randomBytes(8).toString("hex");
         const sawStart = deltaTexts.has(eventId);
         const streamedSoFar = deltaTexts.get(eventId) ?? "";
         if (text.length > streamedSoFar.length && text.startsWith(streamedSoFar)) {
@@ -589,7 +601,8 @@ export function createCmaHarness(opts: CmaHarnessOptions = {}): Harness {
     const markExistingEventsSeen = async () => {
       if (ensured.fresh) return;
       for (const event of await listAllEvents(api, cmaSessionId)) {
-        if (event.id) seenEventIds.add(event.id);
+        const key = eventKey(event);
+        if (key) seenEventIds.add(key);
       }
     };
 
