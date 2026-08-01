@@ -17,7 +17,7 @@ export interface CmaWorkerOptions {
   environmentId: string;
   workerId?: string;
   resolveSession(cmaSessionId: string): Promise<CmaWorkerExecution | null>;
-  denyReason?(execution: CmaWorkerExecution, toolName: string, input: unknown): string | null;
+  denyReason(execution: CmaWorkerExecution, toolName: string, input: unknown): string | null;
   turnTimeoutMs?: number;
   heartbeatIntervalMs?: number;
   onError?(context: string, error: unknown): void;
@@ -75,7 +75,7 @@ export function createCmaWorker(opts: CmaWorkerOptions): CmaWorker {
     event: CmaEvent,
   ): Promise<void> => {
     if (!event.id || typeof event.name !== "string") return;
-    const denial = opts.denyReason?.(execution, event.name, event.input) ?? null;
+    const denial = opts.denyReason(execution, event.name, event.input);
     if (denial) {
       await respond(cmaSessionId, event.id, `[denied by command policy] ${denial}`);
       return;

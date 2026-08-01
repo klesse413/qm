@@ -127,7 +127,7 @@ function worker(
     environmentId: "env_w",
     workerId: "qm-test-worker",
     resolveSession: async (id) => executions.get(id) ?? null,
-    ...(deny ? { denyReason: (_execution, toolName, input) => deny(toolName, input) } : {}),
+    denyReason: (_execution, toolName, input) => (deny ? deny(toolName, input) : null),
     heartbeatIntervalMs: 20,
     turnTimeoutMs: 10_000,
     onError: () => {},
