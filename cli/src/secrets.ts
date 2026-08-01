@@ -42,9 +42,31 @@ export const FIRST_PARTY_SECRET_SPECS: readonly SecretSpec[] = [
   {
     name: "ANTHROPIC_API_KEY",
     service: "core",
-    required: { when: { kind: "model-provider", provider: "anthropic" }, optionalOtherwise: true },
+    required: {
+      when: {
+        kind: "any",
+        conditions: [
+          { kind: "model-provider", provider: "anthropic" },
+          {
+            kind: "all",
+            conditions: [
+              { kind: "env-equals", service: "core", name: "HARNESS", value: "cma" },
+              { kind: "env-absent", service: "core", name: "CMA_API_KEY" },
+            ],
+          },
+        ],
+      },
+      optionalOtherwise: true,
+    },
     description:
-      'Anthropic API key: bills the base model when modelProvider is "anthropic", an optional deployment fallback otherwise.',
+      'Anthropic API key: bills the base model when modelProvider is "anthropic", authenticates the CMA harness against the Claude API unless CMA_API_KEY is set, an optional deployment fallback otherwise.',
+  },
+  {
+    name: "CMA_API_KEY",
+    service: "core",
+    required: false,
+    description:
+      'Claude API key for the CMA harness when it should not share ANTHROPIC_API_KEY; the core requires one of the two at startup when HARNESS is "cma".',
   },
   {
     name: "OPENROUTER_API_KEY",
@@ -379,8 +401,9 @@ function conditionMatches(config: QmConfig, condition: SecretCondition): boolean
   const value = (
     config.env[condition.service]?.[condition.name] ?? targetEnvDefault(config, condition.service, condition.name)
   )?.trim();
-  if (condition.kind === "env-absent") return !value;
-  if (condition.kind === "env-present") return Boolean(value);
+  const secretDeclared = Boolean(config.secretEnv?.[condition.service]?.[condition.name]);
+  if (condition.kind === "env-absent") return !value && !secretDeclared;
+  if (condition.kind === "env-present") return Boolean(value) || secretDeclared;
   if (condition.kind === "env-in") return value !== undefined && condition.values.includes(value);
   return value === condition.value;
 }

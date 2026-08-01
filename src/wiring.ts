@@ -165,6 +165,7 @@ import { createMockHarness } from "./harness/mock-harness.ts";
 import { createOpenCodeHarness, openCodeHarnessConfigOptions } from "./harness/opencode-harness.ts";
 import { createCodexHarness, codexHarnessConfigOptions } from "./harness/codex-harness.ts";
 import { createClaudeHarness, claudeHarnessConfigOptions } from "./harness/claude-harness.ts";
+import { createCmaHarness, cmaHarnessConfigOptions, type CmaSessionRecord } from "./harness/cma-harness.ts";
 import { createPiHarness, piHarnessConfigOptions } from "./harness/pi-harness.ts";
 import { createHarnessRouter, resolveRuntimeChoiceDurable } from "./harness/harness-router.ts";
 import type { Harness } from "./harness/harness.ts";
@@ -709,6 +710,14 @@ export function buildApp(
     ["opencode", createOpenCodeHarness({ ...openCodeHarnessConfigOptions(config), signals: runSignals, tasks })],
     ["codex", createCodexHarness({ ...codexHarnessConfigOptions(config), signals: runSignals, tasks })],
     ["claude", createClaudeHarness({ ...claudeHarnessConfigOptions(config), signals: runSignals, tasks })],
+    [
+      "cma",
+      createCmaHarness({
+        ...cmaHarnessConfigOptions(config),
+        signals: runSignals,
+        sessions: artifactMap<CmaSessionRecord>("cma_harness_sessions"),
+      }),
+    ],
     ["mock", createMockHarness()],
   ]);
   const fallbackHarness = config.harness as HarnessId;
@@ -1085,7 +1094,10 @@ export function buildApp(
     harnessId: config.harness,
     runtimeFallback: fallback,
     providerKeys,
-    modelProviders: modelProviderAvailabilityFor(config.harness, providerKeys),
+    modelProviders: modelProviderAvailabilityFor(
+      config.harness,
+      config.harness === "cma" && config.cmaApiKey ? { ...providerKeys, anthropic: true } : providerKeys,
+    ),
     runWaitMs: config.runWaitMs,
   });
   const slackCore = createSlackCoreClient({
