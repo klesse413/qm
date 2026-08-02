@@ -42,9 +42,25 @@ export const FIRST_PARTY_SECRET_SPECS: readonly SecretSpec[] = [
   {
     name: "ANTHROPIC_API_KEY",
     service: "core",
-    required: { when: { kind: "model-provider", provider: "anthropic" }, optionalOtherwise: true },
+    required: {
+      when: {
+        kind: "any",
+        conditions: [
+          { kind: "env-equals", service: "core", name: "HARNESS", value: "cma" },
+          { kind: "model-provider", provider: "anthropic" },
+        ],
+      },
+      optionalOtherwise: true,
+    },
     description:
-      'Anthropic API key: bills the base model when modelProvider is "anthropic", an optional deployment fallback otherwise.',
+      'Anthropic API key: bills the base model when modelProvider is "anthropic" and authenticates the CMA harness, an optional deployment fallback otherwise.',
+  },
+  {
+    name: "CMA_ENVIRONMENT_KEY",
+    service: "core",
+    required: false,
+    description:
+      "Environment key for a self-hosted CMA environment; when set, the CMA harness services the environment's work queue and runs the model's bash tool on each scope's own computer.",
   },
   {
     name: "OPENROUTER_API_KEY",

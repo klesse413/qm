@@ -15,8 +15,21 @@ Each person and each room has its own scoped memory, files, keychain view, permi
 crons, web apps, and durable sandbox.
 
 It's built with open source in mind. Pick your own harness and model and switch between
-them — Pi, OpenCode, Codex, and Claude Code all drive the same core, so a deployment
-isn't tied to any single vendor.
+them — Pi, OpenCode, Codex, Claude Code, and Claude Managed Agents all drive the same
+core, so a deployment isn't tied to any single vendor.
+
+The first four run the agent loop in-process. Claude Managed Agents (CMA) runs it on
+Anthropic's servers, one persistent session per conversation. Next to running Claude
+Code in-process, the case is operational: there is no CLI for the core to install,
+supervise, and upgrade; turns exchange structured events over plain HTTPS; a turn
+sends one message because the session already holds the history, so long conversations
+stay fast and server-side caching and compaction come for free; and every session has
+a live trace in the Claude console with workspace spend limits on top. Tool calls
+still come back to QM and run inside your deployment, so credentials, files, and
+sandboxes never leave it and the same command policy and approvals apply. The tradeoff
+is where conversation state lives: Anthropic sees every prompt on any harness, but
+with CMA it also stores the conversation between calls, under your workspace's data
+retention.
 
 ## Features
 
@@ -49,7 +62,7 @@ flowchart LR
 
   subgraph CORE["Headless core"]
     API["API · identity · policy · scheduler"]
-    LOOP["Agent loop<br/>(Pi, OpenCode, Claude Code)"]
+    LOOP["Agent loop<br/>(Pi, OpenCode, Claude Code, CMA)"]
     API <--> LOOP
   end
 

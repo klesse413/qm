@@ -12,10 +12,12 @@ import { DEFAULT_CAPTURE_QUIET_MS } from "./memory/strategies/per-turn.ts";
 import { parseSecurityPosture, type SecurityPosture } from "./security/security-posture.ts";
 import { slackPluginConfigFromEnv, type SlackPluginConfig } from "./slack/config.ts";
 import {
+  HARNESS_IDS,
   MODEL_PROVIDERS,
   defaultModelForProvider,
   isModelProvider,
   onlyProvider,
+  type HarnessId,
   type ModelProvider,
   type ModelProviderAvailability,
 } from "./model/pi-models.ts";
@@ -28,7 +30,7 @@ export interface Config {
   orgId: string;
   sessionStore: "memory" | "postgres";
   databaseUrl?: string;
-  harness: "mock" | "pi" | "opencode" | "codex" | "claude";
+  harness: HarnessId;
   securityPosture: SecurityPosture;
   sandboxBackend: "aws" | "local" | "sprites";
   sandboxSecondaryBackend?: "aws" | "local" | "sprites";
@@ -43,6 +45,12 @@ export interface Config {
   claudeModel?: string;
   claudeBinPath?: string;
   claudeProcessEnv: NodeJS.ProcessEnv;
+  cmaModel?: string;
+  cmaEnvironmentId?: string;
+  cmaEnvironmentKey?: string;
+  cmaAgentId?: string;
+  cmaBaseUrl?: string;
+  cmaDelivery: "stream" | "poll";
   detectModelId?: string;
   titleModelId?: string;
   judgeModelId?: string;
@@ -146,6 +154,7 @@ export interface Config {
 export function configuredModelForHarness(config: Config, harness: string): string | undefined {
   if (harness === "codex") return config.codexModel;
   if (harness === "claude") return config.claudeModel;
+  if (harness === "cma") return config.cmaModel;
   if (harness === "opencode") return config.opencodeModel;
   return config.modelId;
 }
@@ -464,11 +473,15 @@ function orgBrandingFromEnv(env: NodeJS.ProcessEnv): Config["brandingDefault"] {
 function harnessEnvStrict(value: string | undefined): Config["harness"] {
   if (value === undefined || value.trim() === "") return "mock";
   const harness = value.trim();
-  if (harness === "mock" || harness === "pi" || harness === "opencode" || harness === "codex" || harness === "claude")
-    return harness;
-  throw new Error(
-    `HARNESS=${JSON.stringify(value)} is not recognized — use mock, pi, opencode, codex, or claude, or unset it.`,
-  );
+  if ((HARNESS_IDS as readonly string[]).includes(harness)) return harness as HarnessId;
+  throw new Error(`HARNESS=${JSON.stringify(value)} is not recognized — use ${HARNESS_IDS.join(", ")}, or unset it.`);
+}
+
+function cmaDeliveryEnvStrict(value: string | undefined): Config["cmaDelivery"] {
+  if (value === undefined || value.trim() === "") return "stream";
+  const delivery = value.trim();
+  if (delivery === "stream" || delivery === "poll") return delivery;
+  throw new Error(`CMA_DELIVERY=${JSON.stringify(value)} is not recognized — use stream or poll, or unset it.`);
 }
 
 function sandboxBackendEnvStrict(value: string | undefined, name = "SANDBOX_BACKEND"): Config["sandboxBackend"] {
@@ -568,6 +581,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (env.NODE_ENV === "production" && harnessEnvStrict(env.HARNESS) === "mock") {
     console.warn(
       `[config] HARNESS is ${env.HARNESS?.trim() ? '"mock"' : "unset, which means mock"} in production — this deployment answers every message with canned text and calls no model provider. Set HARNESS=pi to run real agent turns.`,
+    );
+  }
+  if (harnessEnvStrict(env.HARNESS) === "cma" && !env.CMA_ENVIRONMENT_ID) {
+    throw new Error(
+      "HARNESS=cma requires CMA_ENVIRONMENT_ID — create an environment once against the Claude API and set its id.",
     );
   }
   if (env.SANDBOX_BACKEND === "sprites" && !env.SPRITES_EGRESS_PROXY_URL) {
@@ -721,6 +739,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env.CLAUDE_MODEL ? { claudeModel: env.CLAUDE_MODEL } : {}),
     ...(env.CLAUDE_BIN ? { claudeBinPath: env.CLAUDE_BIN } : {}),
     claudeProcessEnv,
+    ...(env.CMA_MODEL ? { cmaModel: env.CMA_MODEL } : {}),
+    ...(env.CMA_ENVIRONMENT_ID ? { cmaEnvironmentId: env.CMA_ENVIRONMENT_ID } : {}),
+    ...(env.CMA_ENVIRONMENT_KEY ? { cmaEnvironmentKey: env.CMA_ENVIRONMENT_KEY } : {}),
+    ...(env.CMA_AGENT_ID ? { cmaAgentId: env.CMA_AGENT_ID } : {}),
+    ...(env.CMA_BASE_URL ? { cmaBaseUrl: env.CMA_BASE_URL } : {}),
+    cmaDelivery: cmaDeliveryEnvStrict(env.CMA_DELIVERY),
     ...(env.PI_DETECT_MODEL ? { detectModelId: env.PI_DETECT_MODEL } : {}),
     ...(env.PI_TITLE_MODEL ? { titleModelId: env.PI_TITLE_MODEL } : {}),
     ...(env.PI_JUDGE_MODEL ? { judgeModelId: env.PI_JUDGE_MODEL } : {}),
